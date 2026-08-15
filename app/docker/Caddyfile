@@ -1,0 +1,65 @@
+# FrankenPHP configuration for the container.
+#
+# Laravel documents `php artisan octane:start`, and that is the right command on
+# a laptop: it supervises the server, restarts it when files change, and prints
+# a friendly banner. In a container none of that is wanted. ECS is already the
+# supervisor, and octane:start adds a second PHP process whose only job is to
+# watch the first one, plus a Caddy admin endpoint on port 2019 that nothing
+# uses. Running FrankenPHP directly means one process as PID 1, receiving
+# SIGTERM straight from ECS with nothing in between that has to forward it.
+#
+# The worker script is still Octane's. This changes who launches it, not what
+# runs.
+
+{
+	# The load balancer terminates TLS, so the container speaks plain HTTP and
+	# Caddy must not try to provision certificates for itself.
+	auto_https off
+
+	# Nothing consumes the admin API. Leaving it listening is attack surface for
+	# no benefit.
+	admin off
+
+	log {
+		format json
+		level {$CADDY_LOG_LEVEL:INFO}
+	}
+
+	frankenphp {
+		# One long-lived, already-booted PHP process per worker, each serving
+		# many requests. FrankenPHP allocates one thread per worker plus one
+		# spare, so `num 2` means three threads.
+		worker {
+			file /app/public/frankenphp-worker.php
+			num {$OCTANE_WORKERS:2}
+
+			# Fail fast instead of restarting a broken worker in a loop while
+			# the load balancer waits for a health check that will never pass.
+			max_consecutive_failures 3
+		}
+	}
+}
+
+:8000 {
+	log {
+		format json
+		level {$CADDY_LOG_LEVEL:INFO}
+	}
+
+	root /app/public
+	encode zstd gzip
+
+	php_server {
+		# These two lines are the entire difference between worker mode and
+		# classic mode, and leaving them out fails silently.
+		#
+		# Declaring a worker above is not enough. FrankenPHP hands a request to
+		# a worker only when the script it resolves to IS the worker script.
+		# Without these, php_server resolves every request to index.php, which
+		# is not the worker, so each request boots the framework from scratch.
+		# Nothing errors. The only symptom is that the performance you installed
+		# Octane for never arrives.
+		index frankenphp-worker.php
+		try_files {path} frankenphp-worker.php
+	}
+}

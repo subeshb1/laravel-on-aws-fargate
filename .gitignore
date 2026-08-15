@@ -1,0 +1,37 @@
+# dependencies
+node_modules/
+app/vendor/
+app/node_modules/
+
+# build output
+app/public/build/
+app/public/hot
+app/public/storage
+app/bootstrap/cache/*.php
+infra/cdk.out/
+infra/*.js
+infra/*.d.ts
+!infra/jest.config.js
+
+# local state
+.env
+.env.*
+*.log
+app/storage/framework/cache/data/*
+app/storage/framework/sessions/*
+app/storage/framework/views/*
+app/storage/logs/*
+app/database/database.sqlite
+.phpunit.result.cache
+
+# never commit
+*.pem
+*.key
+.aws/
+frankenphp
+
+.DS_Store
+
+# cdk output dirs from --output overrides
+infra/cdk.out*/
+infra/cdk.context.json
